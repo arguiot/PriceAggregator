@@ -3,97 +3,97 @@ pragma solidity ^0.8.17;
 
 import "forge-std/Test.sol";
 import "../src/PriceAggregator.sol";
-import "./MockAggregator.sol";
+import "../src/MockUniswapV3Pool.sol";
 
 contract PriceAggregatorTest is Test {
     PriceAggregator aggregator;
-    MockAggregator mock;
+    MockUniswapV3Pool mockPool;
 
-    // Set up the testing environment.
+    // SetUp is executed before every test.
     function setUp() public {
         aggregator = new PriceAggregator();
-        mock = new MockAggregator();
-
-        // Initialize the mock aggregator to return a valid price.
-        // We'll use:
-        //   roundId: 1, price: 2000, startedAt: now, updatedAt: now, answeredInRound: 1.
-        mock.setLatestRoundData(1, 2000, block.timestamp, block.timestamp, 1);
+        mockPool = new MockUniswapV3Pool();
     }
 
-    /// Test that a new pair is registered and updated.
+    /// Test that a new pair is correctly registered and updated with TWAP data.
     function testNewPair() public {
-        // Call updatePrice with pair "ETH/USD" and register the mock as aggregator.
-        aggregator.updatePrice("ETH/USD", address(mock));
+        // Set observations such that:
+        // tickCumulative0 = 0 and tickCumulative1 = 86400.
+        // This yields an average tick = (86400 - 0) / 86400 = 1.
+        mockPool.setObservations(0, 86400);
+
+        // Register and update the "ETH/USD" pair.
+        aggregator.updatePrice("ETH/USD", address(mockPool));
 
         (
             bytes32 chainHash,
             uint256 lastUpdateTimestamp,
             int256 lastPrice,
-            uint80 lastRoundId,
             uint256 lastUpdatedAt,
             uint256 lastBlockNumber
         ) = aggregator.getPriceInfo("ETH/USD");
 
-        // Check that the price info is updated.
+        // Check that the chain hash is not empty.
         assertTrue(chainHash != bytes32(0), "ChainHash should not be 0");
-        assertEq(lastPrice, 2000, "Price should equal the value from mock");
-        assertEq(lastRoundId, 1, "Round id should match");
-        // lastUpdatedAt and block number can be further compared if necessary.
+        // lastPrice (average tick) should be 1.
+        assertEq(lastPrice, 1, "Expected average tick to be 1");
+        // lastUpdateTimestamp and lastUpdatedAt should be equal and nonzero.
+        assertGt(lastUpdateTimestamp, 0, "Timestamp should be > 0");
+        assertEq(lastUpdatedAt, lastUpdateTimestamp, "Timestamps should match");
+        // lastBlockNumber should equal the current block.
+        assertEq(lastBlockNumber, block.number, "Block numbers should match");
     }
 
-    /// Test that a subsequent update for an existing pair works (after time warp).
+    /// Test that updating an existing pair works after the update interval has passed.
     function testExistingPairUpdate() public {
-        // First update for pair "BTC/USD".
-        aggregator.updatePrice("BTC/USD", address(mock));
+        // For the pair "BTC/USD", first set mock observations to return an average tick of 2.
+        // e.g., tickCumulative0 = 0, tickCumulative1 = TWAP_PERIOD * 2 = 86400 * 2.
+        mockPool.setObservations(0, 86400 * 2);
+        aggregator.updatePrice("BTC/USD", address(mockPool));
 
-        // Save the first chain hash.
-        (bytes32 initialHash, uint256 ts,,,,) = aggregator.getPriceInfo("BTC/USD");
+        // Save the initial chain hash and timestamp.
+        (bytes32 initialHash, uint256 initialTimestamp, int256 initialPrice,,) = aggregator.getPriceInfo("BTC/USD");
+        assertEq(initialPrice, 2, "Expected average tick of 2");
 
-        // Advance time by more than one day.
+        // Advance time by just over one day.
         vm.warp(block.timestamp + 1 days + 1);
 
-        // Update the mock aggregator's data with new values.
-        mock.setLatestRoundData(2, 2500, block.timestamp, block.timestamp, 2);
+        // Update the mock to simulate a new TWAP result: average tick = 3
+        // Set tickCumulative0 = 0, tickCumulative1 = TWAP_PERIOD * 3.
+        mockPool.setObservations(0, 86400 * 3);
 
-        // Update for the same pair. For an existing pair, pass address(0) or the correct aggregator.
+        // For an existing pair, we can pass address(0) to use the already stored pool.
         aggregator.updatePrice("BTC/USD", address(0));
 
-        (
-            bytes32 newChainHash,
-            uint256 newTs,
-            int256 newPrice,
-            uint80 newRoundId,
-            uint256 newUpdatedAt,
-            uint256 newBlockNumber
-        ) = aggregator.getPriceInfo("BTC/USD");
+        (bytes32 newHash, uint256 newTimestamp, int256 newPrice, uint256 newUpdatedAt, uint256 newBlockNumber) =
+            aggregator.getPriceInfo("BTC/USD");
 
-        // Verify that the chain hash has changed.
-        assertTrue(newChainHash != initialHash, "New chain hash should differ from initial");
-
-        // Validate new price data.
-        assertEq(newPrice, 2500, "New price should equal the value from mock");
-        assertEq(newRoundId, 2, "Round id should match updated value");
-
-        // Ensure that the update timestamp has moved forward.
-        assertGt(newTs, ts, "Timestamp should increase after update");
+        // Validate that the chain hash has been updated.
+        assertTrue(newHash != initialHash, "Chain hash should update");
+        // Validate the new average tick is 3.
+        assertEq(newPrice, 3, "Expected average tick of 3");
+        // Ensure the timestamp has increased.
+        assertGt(newTimestamp, initialTimestamp, "Timestamp should increase");
+        // Block number should reflect the warp.
+        assertEq(newBlockNumber, block.number, "Block number should match");
     }
 
     /// Test that updating too soon reverts.
     function testUpdateTooSoonReverts() public {
-        // First update for pair "ETHUSD".
-        aggregator.updatePrice("ETHUSD", address(mock));
-        // Expect the second call to revert as we haven't waited a day.
+        mockPool.setObservations(0, 86400);
+        aggregator.updatePrice("ETHUSD", address(mockPool));
+        // Expect revert on a second update without waiting one day.
         vm.expectRevert("Update too soon");
         aggregator.updatePrice("ETHUSD", address(0));
     }
 
-    /// Test that providing a wrong aggregator for an existing pair reverts.
-    function testAggregatorMismatchReverts() public {
-        // First update registers pair "LINK/USD".
-        aggregator.updatePrice("LINK/USD", address(mock));
-        // Attempt to update with a nonzero aggregator address that is different.
-        address fakeAggregator = address(0x1234);
-        vm.expectRevert("Aggregator address mismatch");
-        aggregator.updatePrice("LINK/USD", fakeAggregator);
+    /// Test that providing a mismatched pool address for an existing pair reverts.
+    function testPoolAddressMismatchReverts() public {
+        mockPool.setObservations(0, 86400);
+        aggregator.updatePrice("LINK/USD", address(mockPool));
+        // Provide a fake pool address.
+        address fakePool = address(0x1234);
+        vm.expectRevert("Pool address mismatch");
+        aggregator.updatePrice("LINK/USD", fakePool);
     }
 }
