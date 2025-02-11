@@ -1,66 +1,98 @@
-## Foundry
+# PriceAggregator
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+PriceAggregator is a decentralized Solidity contract that tracks trading pair prices by combining data from Chainlink Price Feeds with a continuously updated chain hash. Anyone can update or register a new trading pair, and each update fetches the latest on-chain price data from Chainlink, adds extra metadata (such as the Chainlink round, feed timestamp, and block number), and commits that information into a tamper-evident hash chain.
 
-Foundry consists of:
+## Key Features
 
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+- **Decentralized Updates:**
+  Anyone can call the update function to register a new trading pair or update an existing one. Updates are restricted to once per day per pair to prevent rapid, malicious changes.
 
-## Documentation
+- **Chainlink Price Feeds Integration:**
+  The contract uses Chainlink Price Feeds to retrieve the latest price data, ensuring that the price information is reliable and decentralized.
 
-https://book.getfoundry.sh/
+- **Chain Hash Commitment:**
+  Each update combines the previous chain hash with the new price data, feed timestamp, round ID, and block number. This produces a continuously chained hash that is verifiable and tamper-evident.
+
+- **Open Tracking Mechanism:**
+  The contract is fully open and does not rely on ownership. When a pair is updated, if it does not already exist, it is registered with the provided aggregator address. If it already exists, any non-zero aggregator address provided must match the registered one.
+
+- **On-Chain Data Storage:**
+  All updates are recorded on-chain. A view function (`getPriceInfo`) returns the full set of information for any tracked trading pair.
+
+## Installation and Setup
+
+1. **Install Foundry:**
+   Follow the instructions on the [Foundry GitHub page](https://github.com/foundry-rs/foundry) to install Foundry.
+
+2. **Clone the Repository:**
+
+    ```bash
+    git clone <repository-url>
+    cd <repository-directory>
+    ```
+
+3. **Install Dependencies:**
+   Make sure you have OpenZeppelin contracts installed. You can install them via Forge:
+
+    ```bash
+    forge install OpenZeppelin/openzeppelin-contracts
+    ```
+
+## Deployment
+
+PriceAggregator is written in Solidity (^0.8.17) and can be deployed using your favorite deployment tool (e.g., Hardhat, Truffle, or Foundry's deployment scripts). An example deployment using Forge is as follows:
+
+```bash
+forge create --rpc-url <YOUR_RPC_URL> src/PriceAggregator.sol:PriceAggregator
+```
+
+## Running Tests
+
+The tests are written using Foundry. To run the tests, execute:
+
+```bash
+forge test
+```
+
+The included tests cover:
+
+- Registration and update of new trading pairs.
+- Updating existing trading pairs after the enforced update interval.
+- Reverting updates that are attempted too soon.
+- Verifying that mismatched aggregator addresses cause reverts.
 
 ## Usage
 
-### Build
+- **Register/Update a Trading Pair:**
+  Call the `updatePrice` function with:
 
-```shell
-$ forge build
-```
+- `pair`: A string identifier for the trading pair (e.g., `"ETH/USD"`).
+- `aggregatorAddress`: For new pairs, provide the valid Chainlink Price Feed address; for existing pairs, you may pass `address(0)` (or the correct aggregator address).
 
-### Test
+- **View Price Information:**
+  Use the `getPriceInfo` view function to retrieve the following information for a trading pair:
 
-```shell
-$ forge test
-```
+- Running chain hash of updates
+- Timestamp of the last update
+- Last price fetched
+- Chainlink round ID and feed timestamp
+- Block number at which the update was recorded
 
-### Format
+## Security Considerations
 
-```shell
-$ forge fmt
-```
+- **Update Frequency:**
+  The contract enforces a one-day interval between updates per pair.
 
-### Gas Snapshots
+- **Aggregator Validation:**
+  Once a trading pair is registered, any provided aggregator address during subsequent updates must match the registered one.
 
-```shell
-$ forge snapshot
-```
+- **Auditing:**
+  As this contract manages critical price data, extensive testing and auditing are recommended before deploying in a production environment.
 
-### Anvil
+## Contributing
 
-```shell
-$ anvil
-```
+Contributions, suggestions, and improvements are welcome. Please open an issue or submit a pull request.
 
-### Deploy
+## License
 
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-```
-
-### Cast
-
-```shell
-$ cast <subcommand>
-```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
-```
+This project is licensed under the MIT License.
