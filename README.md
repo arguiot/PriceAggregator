@@ -1,14 +1,14 @@
 # PriceAggregator
 
-PriceAggregator is a decentralized Solidity contract that tracks trading pair prices by combining data from Chainlink Price Feeds with a continuously updated chain hash. Anyone can update or register a new trading pair, and each update fetches the latest on-chain price data from Chainlink, adds extra metadata (such as the Chainlink round, feed timestamp, and block number), and commits that information into a tamper-evident hash chain.
+PriceAggregator is a decentralized Solidity contract that tracks trading pair prices by combining data from Uniswap V3 (TWAP) Feeds with a continuously updated chain hash. Anyone can update or register a new trading pair, and each update fetches the latest on-chain price data, and commits that information into a tamper-evident hash chain.
 
 ## Key Features
 
 - **Decentralized Updates:**
   Anyone can call the update function to register a new trading pair or update an existing one. Updates are restricted to once per day per pair to prevent rapid, malicious changes.
 
-- **Chainlink Price Feeds Integration:**
-  The contract uses Chainlink Price Feeds to retrieve the latest price data, ensuring that the price information is reliable and decentralized.
+- **Uniswap V3 Price Feeds Integration:**
+  The contract uses Uniswap V3 (TWAP) to retrieve the latest price data, ensuring that the price information is reliable and decentralized.
 
 - **Chain Hash Commitment:**
   Each update combines the previous chain hash with the new price data, feed timestamp, round ID, and block number. This produces a continuously chained hash that is verifiable and tamper-evident.
