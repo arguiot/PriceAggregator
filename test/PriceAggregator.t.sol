@@ -47,9 +47,7 @@ contract PriceAggregatorTest is Test {
         aggregator.updatePrice("BTC/USD", address(mock));
 
         // Save the first chain hash.
-        (bytes32 initialHash, uint256 ts, , , , ) = aggregator.getPriceInfo(
-            "BTC/USD"
-        );
+        (bytes32 initialHash, uint256 ts,,,,) = aggregator.getPriceInfo("BTC/USD");
 
         // Advance time by more than one day.
         vm.warp(block.timestamp + 1 days + 1);
@@ -70,10 +68,7 @@ contract PriceAggregatorTest is Test {
         ) = aggregator.getPriceInfo("BTC/USD");
 
         // Verify that the chain hash has changed.
-        assertTrue(
-            newChainHash != initialHash,
-            "New chain hash should differ from initial"
-        );
+        assertTrue(newChainHash != initialHash, "New chain hash should differ from initial");
 
         // Validate new price data.
         assertEq(newPrice, 2500, "New price should equal the value from mock");

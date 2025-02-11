@@ -6,13 +6,7 @@ interface AggregatorV3Interface {
     function latestRoundData()
         external
         view
-        returns (
-            uint80 roundId,
-            int256 answer,
-            uint256 startedAt,
-            uint256 updatedAt,
-            uint80 answeredInRound
-        );
+        returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound);
 }
 
 /// @title PriceAggregator
@@ -60,56 +54,35 @@ contract PriceAggregator {
      * @param aggregatorAddress The Chainlink Price Feed aggregator address.
      *        For existing pairs, pass address(0) or the correct aggregator address.
      */
-    function updatePrice(
-        string calldata pair,
-        address aggregatorAddress
-    ) external {
+    function updatePrice(string calldata pair, address aggregatorAddress) external {
         require(bytes(pair).length > 0, "Invalid pair identifier");
 
         AggregatorV3Interface feed = priceFeeds[pair];
 
         // If the pair is not yet registered, register it.
         if (address(feed) == address(0)) {
-            require(
-                aggregatorAddress != address(0),
-                "Aggregator address required for new pair"
-            );
+            require(aggregatorAddress != address(0), "Aggregator address required for new pair");
             feed = AggregatorV3Interface(aggregatorAddress);
             priceFeeds[pair] = feed;
         } else {
             // If an aggregator address is provided for an existing pair, enforce a match.
             if (aggregatorAddress != address(0)) {
-                require(
-                    aggregatorAddress == address(feed),
-                    "Aggregator address mismatch"
-                );
+                require(aggregatorAddress == address(feed), "Aggregator address mismatch");
             }
         }
 
         PriceInfo storage info = priceInfo[pair];
         // If the pair was updated before, enforce the update interval.
         if (info.lastUpdateTimestamp > 0) {
-            require(
-                block.timestamp >= info.lastUpdateTimestamp + UPDATE_INTERVAL,
-                "Update too soon"
-            );
+            require(block.timestamp >= info.lastUpdateTimestamp + UPDATE_INTERVAL, "Update too soon");
         }
 
         // Fetch the latest price data from the Chainlink Price Feed.
-        (uint80 roundId, int256 price, , uint256 updatedAt, ) = feed
-            .latestRoundData();
+        (uint80 roundId, int256 price,, uint256 updatedAt,) = feed.latestRoundData();
         require(price > 0, "Invalid price");
 
         // Create a new chain hash by combining the previous hash with the new update data.
-        bytes32 newChainHash = keccak256(
-            abi.encodePacked(
-                info.chainHash,
-                price,
-                updatedAt,
-                roundId,
-                block.number
-            )
-        );
+        bytes32 newChainHash = keccak256(abi.encodePacked(info.chainHash, price, updatedAt, roundId, block.number));
 
         // Update the price info.
         info.chainHash = newChainHash;
@@ -119,14 +92,7 @@ contract PriceAggregator {
         info.lastUpdateTimestamp = block.timestamp;
         info.lastBlockNumber = block.number;
 
-        emit PriceUpdated(
-            pair,
-            price,
-            roundId,
-            updatedAt,
-            block.number,
-            newChainHash
-        );
+        emit PriceUpdated(pair, price, roundId, updatedAt, block.number, newChainHash);
     }
 
     /**
@@ -139,9 +105,7 @@ contract PriceAggregator {
      * @return lastUpdatedAt Timestamp received from the Chainlink Price Feed.
      * @return lastBlockNumber Block number when updatePrice was last called.
      */
-    function getPriceInfo(
-        string calldata pair
-    )
+    function getPriceInfo(string calldata pair)
         external
         view
         returns (
